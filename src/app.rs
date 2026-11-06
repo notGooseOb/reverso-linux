@@ -103,37 +103,31 @@ impl App {
                     frequency: 95,
                     count: 3,
                     examples: vec![
-                        translator::Example {
-                            source: "Hello, how are you?".to_string(),
-                            target: "Привет, как дела?".to_string(),
-                        },
-                        translator::Example {
-                            source: "Hello there, my friend.".to_string(),
-                            target: "Привет, мой друг.".to_string(),
-                        },
-                        translator::Example {
-                            source: "Say hello to your mother for me.".to_string(),
-                            target: "Передай привет своей маме.".to_string(),
-                        },
+                        translator::Example::plain("Hello, how are you?", "Привет, как дела?"),
+                        translator::Example::plain("Hello there, my friend.", "Привет, мой друг."),
+                        translator::Example::plain(
+                            "Say hello to your mother for me.",
+                            "Передай привет своей маме.",
+                        ),
                     ],
                 },
                 translator::TranslationOption {
                     translation: "здравствуйте".to_string(),
                     frequency: 32,
                     count: 2,
-                    examples: vec![translator::Example {
-                        source: "Hello, sir.".to_string(),
-                        target: "Здравствуйте, сэр.".to_string(),
-                    }],
+                    examples: vec![translator::Example::plain(
+                        "Hello, sir.",
+                        "Здравствуйте, сэр.",
+                    )],
                 },
                 translator::TranslationOption {
                     translation: "алло".to_string(),
                     frequency: 9,
                     count: 1,
-                    examples: vec![translator::Example {
-                        source: "Hello? Can you hear me?".to_string(),
-                        target: "Алло? Вы меня слышите?".to_string(),
-                    }],
+                    examples: vec![translator::Example::plain(
+                        "Hello? Can you hear me?",
+                        "Алло? Вы меня слышите?",
+                    )],
                 },
             ],
         });

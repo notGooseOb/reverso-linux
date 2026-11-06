@@ -116,6 +116,18 @@ fn text_layout(
     layout
 }
 
+fn markup_layout(
+    pctx: &pango::Context,
+    markup: &str,
+    width: f64,
+    px: f64,
+    bold: bool,
+) -> pango::Layout {
+    let layout = text_layout(pctx, "", width, px, bold);
+    layout.set_markup(markup);
+    layout
+}
+
 fn line_height(pctx: &pango::Context, px: f64) -> f64 {
     let mut desc = pango::FontDescription::from_string("Sans");
     desc.set_absolute_size(px * pango::SCALE as f64);
@@ -428,8 +440,8 @@ fn draw_examples(
     let col_w = ((width - col_gap) / 2.0).max(10.0);
 
     for example in examples {
-        let source = text_layout(pctx, &example.source, col_w, 11.5 * scale, false);
-        let target = text_layout(pctx, &example.target, col_w, 11.5 * scale, false);
+        let source = markup_layout(pctx, &example.source_markup, col_w, 11.5 * scale, false);
+        let target = markup_layout(pctx, &example.target_markup, col_w, 11.5 * scale, false);
         if pango::find_base_dir(&example.target) == pango::Direction::Rtl {
             target.set_alignment(pango::Alignment::Right);
         }

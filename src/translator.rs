@@ -10,8 +10,36 @@ const MAX_EXAMPLES: usize = 128;
 
 #[derive(Clone, Default)]
 pub struct Example {
+    /// Plain example text, used for direction and deduplication.
     pub source: String,
     pub target: String,
+    /// Pango markup for display; `<em>` runs are converted to bold.
+    pub source_markup: String,
+    pub target_markup: String,
+}
+
+impl Example {
+    pub fn plain(source: impl Into<String>, target: impl Into<String>) -> Self {
+        let source = source.into();
+        let target = target.into();
+        Self {
+            source_markup: escape_markup(&source),
+            target_markup: escape_markup(&target),
+            source,
+            target,
+        }
+    }
+
+    fn from_html(source: &str, target: &str) -> Self {
+        let (source, source_markup) = parse_rich(source);
+        let (target, target_markup) = parse_rich(target);
+        Self {
+            source,
+            target,
+            source_markup,
+            target_markup,
+        }
+    }
 }
 
 #[derive(Clone, Default)]
@@ -183,13 +211,10 @@ pub fn translate(text: &str, source: &str, target: &str) -> Result<Response, Str
             if let (Some(sources), Some(targets)) = (sources, targets) {
                 opt.count = sources.len() as i32;
                 for (s, t) in sources.iter().zip(targets.iter()).take(MAX_EXAMPLES) {
-                    let s = strip_html(s.as_str().unwrap_or(""));
-                    let t = strip_html(t.as_str().unwrap_or(""));
-                    if !s.is_empty() || !t.is_empty() {
-                        opt.examples.push(Example {
-                            source: s,
-                            target: t,
-                        });
+                    let example =
+                        Example::from_html(s.as_str().unwrap_or(""), t.as_str().unwrap_or(""));
+                    if !example.source.is_empty() || !example.target.is_empty() {
+                        opt.examples.push(example);
                     }
                 }
             }
@@ -278,13 +303,10 @@ fn context_query(
     let mut examples = Vec::new();
     if let Some(list) = v.get("list").and_then(Value::as_array) {
         for item in list.iter().take(MAX_EXAMPLES) {
-            let s = strip_html(&str_field(item, "s_text"));
-            let t = strip_html(&str_field(item, "t_text"));
-            if !s.is_empty() || !t.is_empty() {
-                examples.push(Example {
-                    source: s,
-                    target: t,
-                });
+            let example =
+                Example::from_html(&str_field(item, "s_text"), &str_field(item, "t_text"));
+            if !example.source.is_empty() || !example.target.is_empty() {
+                examples.push(example);
             }
         }
     }
@@ -292,20 +314,96 @@ fn context_query(
     Ok((options, examples))
 }
 
-/// Reverso returns examples as HTML fragments (`<em>word</em>`, entities).
-/// The UI renders plain text, so tags are dropped and entities decoded.
-fn strip_html(src: &str) -> String {
-    let mut out = String::with_capacity(src.len());
-    let mut in_tag = false;
-    for c in src.chars() {
-        match c {
-            '<' => in_tag = true,
-            '>' => in_tag = false,
-            _ if !in_tag => out.push(c),
-            _ => {}
+/// Convert a Reverso HTML fragment into plain text and Pango markup.
+///
+/// Emphasis tags (`<em>`, `<b>`, `<strong>`) are preserved as bold runs; other
+/// markup is dropped and entities are decoded. The plain text is kept for
+/// direction detection and deduplication.
+fn parse_rich(src: &str) -> (String, String) {
+    let mut spans: Vec<(String, bool)> = Vec::new();
+    let mut buffer = String::new();
+    let mut emphasis = 0usize;
+    let mut i = 0;
+
+    while i < src.len() {
+        let rest = &src[i..];
+        if let Some(stripped) = rest.strip_prefix('<') {
+            if let Some(end) = stripped.find('>') {
+                let tag = &stripped[..end];
+                let closing = tag.starts_with('/');
+                let name = tag
+                    .trim_start_matches('/')
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .trim_end_matches('/')
+                    .to_ascii_lowercase();
+                if matches!(name.as_str(), "em" | "b" | "strong") {
+                    flush_span(&mut spans, &mut buffer, emphasis > 0);
+                    if closing {
+                        emphasis = emphasis.saturating_sub(1);
+                    } else {
+                        emphasis += 1;
+                    }
+                }
+                i += end + 2;
+                continue;
+            }
+            // Unterminated tag: treat the remainder as literal text.
+            buffer.push_str(&decode_entities(rest));
+            break;
+        }
+
+        let next = rest.find('<').unwrap_or(rest.len());
+        buffer.push_str(&decode_entities(&rest[..next]));
+        i += next;
+    }
+    flush_span(&mut spans, &mut buffer, emphasis > 0);
+
+    let mut plain = String::new();
+    let mut markup = String::new();
+    for (text, bold) in spans {
+        plain.push_str(&text);
+        if bold {
+            markup.push_str("<b>");
+        }
+        escape_markup_into(&mut markup, &text);
+        if bold {
+            markup.push_str("</b>");
         }
     }
-    decode_entities(&out)
+    (plain, markup)
+}
+
+fn flush_span(spans: &mut Vec<(String, bool)>, buffer: &mut String, bold: bool) {
+    if buffer.is_empty() {
+        return;
+    }
+    if let Some(last) = spans.last_mut() {
+        if last.1 == bold {
+            last.0.push_str(buffer);
+            buffer.clear();
+            return;
+        }
+    }
+    spans.push((std::mem::take(buffer), bold));
+}
+
+fn escape_markup(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    escape_markup_into(&mut out, text);
+    out
+}
+
+fn escape_markup_into(out: &mut String, text: &str) {
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            _ => out.push(c),
+        }
+    }
 }
 
 fn decode_entities(src: &str) -> String {
