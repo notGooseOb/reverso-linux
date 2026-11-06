@@ -53,19 +53,22 @@ sudo apt install build-essential cargo pkg-config \
 ## Build & Install
 
 ```sh
-make                 # builds target/release/reverso-linux and copies it here
-sudo make install    # installs to /usr/local/bin
-sudo make uninstall
+cargo build --release
+sudo install -Dm755 target/release/reverso-linux /usr/local/bin/reverso-linux
 ```
 
-Or directly with Cargo:
+To uninstall:
 
 ```sh
-cargo build --release
+sudo rm /usr/local/bin/reverso-linux
 ```
 
-The version string comes from `git describe --tags --match 'v*'`; pass
-`VERSION=x.y.z` to `make` when building from a source tarball.
+The version string comes from `git describe --tags --match 'v*'`. When building
+from a source tarball, set `APP_VERSION`:
+
+```sh
+APP_VERSION=x.y.z cargo build --release
+```
 
 ## Usage
 
@@ -111,8 +114,3 @@ Press **Win+R** to translate the current clipboard selection.
 target_lang=russian
 last_source_lang=english
 ```
-
-## Legacy C version
-
-The previous GTK3/curl/json-c implementation is preserved under `legacy/c/` for
-reference. It is no longer built by the default `Makefile`.

@@ -26,12 +26,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Build
-        run: make VERSION="${{ steps.version.outputs.version }}" clean all
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: cargo build --release --locked
 
       - name: Package release archive
         run: |
           mkdir -p release
-          cp reverso-linux README.md LICENSE release/ 2>/dev/null || true
+          cp target/release/reverso-linux README.md LICENSE.txt release/
           cd release
           tar czf ../reverso-linux-${{ steps.version.outputs.version }}.tar.gz *
 

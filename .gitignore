@@ -1,7 +1,4 @@
-*.o
 reverso-linux
-build/
-compile_commands.json
 .vscode/
 .idea/
 *.swp

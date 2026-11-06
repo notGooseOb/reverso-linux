@@ -9,16 +9,16 @@ arch=('x86_64')
 url="https://github.com/YOUR_USERNAME/reverso-linux"
 license=('MIT')
 depends=('pango' 'cairo' 'fontconfig' 'curl')
-makedepends=('make' 'pkg-config' 'rust')
+makedepends=('pkg-config' 'rust')
 source=("$pkgname-v$pkgver.tar.gz::https://github.com/YOUR_USERNAME/reverso-linux/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 
 build() {
   cd "$srcdir/$pkgname-v$pkgver"
-  make VERSION="$pkgver"
+  APP_VERSION="$pkgver" cargo build --release --locked
 }
 
 package() {
   cd "$srcdir/$pkgname-v$pkgver"
-  make DESTDIR="$pkgdir" PREFIX=/usr install
+  install -Dm755 target/release/reverso-linux "$pkgdir/usr/bin/reverso-linux"
 }
