@@ -19,6 +19,7 @@ compared with ~53 ms / 34 MB for the old GTK3 build.
 ## Features
 
 - **Persistent source & target language** — saved to `~/.config/reverso-linux/config`
+- **Searchable language menu** — type to filter by name or code; `↑`/`↓` and `Enter` select
 - **Translation options** for short text (1–3 words) with frequency counts
 - **Usage examples** — click a translation option to fetch sentence pairs side by side
 - **Full Unicode** — Arabic/Hebrew RTL and mixed-direction text, CJK, combining marks
@@ -81,6 +82,7 @@ Keyboard and mouse:
 - **Enter** — translate
 - **Esc** — close (or dismiss the language dropdown)
 - **Ctrl+A / C / V / X** — select all, copy, paste, cut
+- Open a language menu and type to filter; **↑/↓** moves the highlight, **Enter** selects, **Esc** closes
 - Click a translation chip to load examples for it
 - Mouse wheel — scroll the results and examples
 

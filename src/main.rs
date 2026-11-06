@@ -256,17 +256,8 @@ impl ApplicationHandler<UserEvent> for App {
             }
             WindowEvent::KeyboardInput { event, .. } => self.on_key(event_loop, event),
             WindowEvent::Ime(ime) => match ime {
-                Ime::Preedit(text, _) => {
-                    self.preedit = text;
-                    self.request_redraw();
-                }
-                Ime::Commit(text) => {
-                    self.preedit.clear();
-                    self.editor.insert(&text);
-                    self.caret_on = true;
-                    self.next_blink = std::time::Instant::now() + Duration::from_millis(530);
-                    self.request_redraw();
-                }
+                Ime::Preedit(text, _) => self.on_ime_preedit(text),
+                Ime::Commit(text) => self.on_ime_commit(text),
                 Ime::Enabled => {}
                 Ime::Disabled => {
                     self.preedit.clear();

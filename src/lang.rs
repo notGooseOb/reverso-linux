@@ -123,3 +123,24 @@ pub fn short(name: &str) -> Option<&'static str> {
 pub fn index_or(name: &str, fallback: usize) -> usize {
     find(name).unwrap_or(fallback)
 }
+
+/// Language indices matching a search query, in menu order.
+///
+/// Matches the English name as a case-insensitive substring, and accepts the
+/// Reverso code (`jpn`) or the two-letter context code (`ja`) as an exact query.
+pub fn filter(query: &str) -> Vec<usize> {
+    let query = query.trim().to_lowercase();
+    if query.is_empty() {
+        return (0..LANGS.len()).collect();
+    }
+    LANGS
+        .iter()
+        .enumerate()
+        .filter(|(_, lang)| {
+            lang.name.to_lowercase().contains(&query)
+                || lang.code.eq_ignore_ascii_case(&query)
+                || lang.short.eq_ignore_ascii_case(&query)
+        })
+        .map(|(idx, _)| idx)
+        .collect()
+}

@@ -31,6 +31,9 @@ pub enum Side {
 
 pub struct Dropdown {
     pub side: Side,
+    pub query: String,
+    /// Index into the filtered language list, not into `lang::LANGS`.
+    pub highlight: Option<usize>,
 }
 
 pub struct App {
@@ -360,10 +363,103 @@ impl App {
                 }
             }
         }
-        self.dropdown = None;
+        self.close_dropdown();
         self.selected_option = None;
         if !self.editor.text.trim().is_empty() {
             self.start_translate();
+        }
+    }
+
+    fn open_dropdown(&mut self, side: Side) {
+        let idx = match side {
+            Side::Source => self.source_idx,
+            Side::Target => self.target_idx,
+        };
+        self.preedit.clear();
+        self.dropdown = Some(Dropdown {
+            side,
+            query: String::new(),
+            highlight: Some(idx),
+        });
+        self.caret_on = true;
+        self.next_blink = Instant::now() + Duration::from_millis(530);
+        if let Some(window) = &self.window {
+            window.set_ime_allowed(false);
+        }
+    }
+
+    fn close_dropdown(&mut self) {
+        if self.dropdown.take().is_some() {
+            self.preedit.clear();
+            if let Some(window) = &self.window {
+                window.set_ime_allowed(true);
+            }
+        }
+    }
+
+    fn dropdown_push_text(&mut self, text: &str) {
+        if let Some(dropdown) = self.dropdown.as_mut() {
+            for ch in text.chars() {
+                if ch.is_control() {
+                    continue;
+                }
+                if dropdown.query.chars().count() >= 40 {
+                    break;
+                }
+                dropdown.query.push(ch);
+            }
+            dropdown.highlight = if lang::filter(&dropdown.query).is_empty() {
+                None
+            } else {
+                Some(0)
+            };
+        }
+        self.caret_on = true;
+        self.next_blink = Instant::now() + Duration::from_millis(530);
+    }
+
+    fn dropdown_backspace(&mut self) {
+        if let Some(dropdown) = self.dropdown.as_mut() {
+            if dropdown.query.pop().is_some() {
+                dropdown.highlight = if lang::filter(&dropdown.query).is_empty() {
+                    None
+                } else {
+                    Some(0)
+                };
+            }
+        }
+        self.caret_on = true;
+        self.next_blink = Instant::now() + Duration::from_millis(530);
+    }
+
+    fn dropdown_move(&mut self, down: bool) {
+        let Some(dropdown) = self.dropdown.as_mut() else {
+            return;
+        };
+        let count = lang::filter(&dropdown.query).len();
+        if count == 0 {
+            dropdown.highlight = None;
+            return;
+        }
+        let current = dropdown.highlight.unwrap_or(0).min(count - 1);
+        dropdown.highlight = Some(if down {
+            (current + 1) % count
+        } else {
+            (current + count - 1) % count
+        });
+    }
+
+    fn dropdown_accept(&mut self) {
+        let selection = self.dropdown.as_ref().and_then(|dropdown| {
+            let filtered = lang::filter(&dropdown.query);
+            let highlight = dropdown.highlight?;
+            filtered
+                .get(highlight)
+                .copied()
+                .map(|language| (dropdown.side, language))
+        });
+        if let Some((side, language)) = selection {
+            self.set_lang(side, language);
         }
     }
 
@@ -403,10 +499,31 @@ impl App {
         let shift = self.mods.shift_key();
 
         if self.dropdown.is_some() {
-            if matches!(event.logical_key, Key::Named(NamedKey::Escape)) {
-                self.dropdown = None;
-                self.request_redraw();
+            match &event.logical_key {
+                Key::Named(NamedKey::Escape) => {
+                    self.close_dropdown();
+                }
+                Key::Named(NamedKey::ArrowDown) => self.dropdown_move(true),
+                Key::Named(NamedKey::ArrowUp) => self.dropdown_move(false),
+                Key::Named(NamedKey::Enter) => self.dropdown_accept(),
+                Key::Named(NamedKey::Backspace) => self.dropdown_backspace(),
+                _ => {
+                    if ctrl && !alt {
+                        if let Key::Character(ch) = &event.logical_key {
+                            if ch.eq_ignore_ascii_case("v") {
+                                if let Some(text) = self.clipboard_get() {
+                                    self.dropdown_push_text(&text);
+                                }
+                            }
+                        }
+                    } else if let Some(text) = &event.text {
+                        if !text.is_empty() && !text.chars().any(char::is_control) {
+                            self.dropdown_push_text(text);
+                        }
+                    }
+                }
             }
+            self.request_redraw();
             return;
         }
 
@@ -456,33 +573,69 @@ impl App {
         self.request_redraw();
     }
 
+    pub fn on_ime_preedit(&mut self, text: String) {
+        if self.dropdown.is_some() {
+            return;
+        }
+        self.preedit = text;
+        self.request_redraw();
+    }
+
+    pub fn on_ime_commit(&mut self, text: String) {
+        if self.dropdown.is_some() {
+            self.dropdown_push_text(&text);
+            self.request_redraw();
+            return;
+        }
+        self.preedit.clear();
+        self.editor.insert(&text);
+        self.caret_on = true;
+        self.next_blink = Instant::now() + Duration::from_millis(530);
+        self.request_redraw();
+    }
+
     pub fn on_press(&mut self, event_loop: &ActiveEventLoop, x: f64, y: f64) {
         if self.dropdown.is_some() {
-            let items = &self.layout.dropdown_items;
-            if let Some(idx) = items.iter().position(|r| r.contains(x, y)) {
+            let hit = self
+                .layout
+                .dropdown_items
+                .iter()
+                .position(|r| r.contains(x, y))
+                .and_then(|vis| self.layout.dropdown_langs.get(vis).copied());
+            if let Some(lang_idx) = hit {
                 let side = self
                     .dropdown
                     .as_ref()
                     .map(|d| d.side)
                     .unwrap_or(Side::Source);
-                self.set_lang(side, idx);
+                self.set_lang(side, lang_idx);
+                self.request_redraw();
+                return;
+            }
+            if self.layout.from.contains(x, y) {
+                self.open_dropdown(Side::Source);
+                self.request_redraw();
+                return;
+            }
+            if self.layout.to.contains(x, y) {
+                self.open_dropdown(Side::Target);
                 self.request_redraw();
                 return;
             }
             if !self.layout.dropdown.contains(x, y) {
-                self.dropdown = None;
+                self.close_dropdown();
                 self.request_redraw();
             }
             return;
         }
 
         if self.layout.from.contains(x, y) {
-            self.dropdown = Some(Dropdown { side: Side::Source });
+            self.open_dropdown(Side::Source);
             self.request_redraw();
             return;
         }
         if self.layout.to.contains(x, y) {
-            self.dropdown = Some(Dropdown { side: Side::Target });
+            self.open_dropdown(Side::Target);
             self.request_redraw();
             return;
         }
@@ -519,6 +672,18 @@ impl App {
         if self.dragging {
             self.pending_cursor = Some(x);
         }
+        if self.dropdown.is_some() {
+            if let Some(vis) = self
+                .layout
+                .dropdown_items
+                .iter()
+                .position(|r| r.contains(x, y))
+            {
+                if let Some(dropdown) = self.dropdown.as_mut() {
+                    dropdown.highlight = Some(vis);
+                }
+            }
+        }
         self.request_redraw();
     }
 
@@ -541,6 +706,9 @@ impl App {
     }
 
     pub fn on_wheel(&mut self, delta: MouseScrollDelta, scale: f64) {
+        if self.dropdown.is_some() {
+            return;
+        }
         let dy = match delta {
             MouseScrollDelta::LineDelta(_, y) => y as f64 * 30.0 * scale,
             MouseScrollDelta::PixelDelta(pos) => pos.y,

@@ -45,6 +45,7 @@ pub struct Layout {
     pub content: Rect,
     pub dropdown: Rect,
     pub dropdown_items: Vec<Rect>,
+    pub dropdown_langs: Vec<usize>,
     pub chips: Vec<Rect>,
     pub content_height: f64,
 }
@@ -79,6 +80,15 @@ fn stroke_round(cr: &Context, r: &Rect, radius: f64, color: Color, width: f64) {
     set_color(cr, color);
     cr.set_line_width(width);
     rounded_path(cr, r, radius);
+    let _ = cr.stroke();
+}
+
+fn draw_check(cr: &Context, x: f64, y: f64, scale: f64) {
+    set_color(cr, ACCENT);
+    cr.set_line_width(1.5 * scale);
+    cr.move_to(x - 5.0 * scale, y);
+    cr.line_to(x - 1.0 * scale, y + 4.0 * scale);
+    cr.line_to(x + 5.0 * scale, y - 4.0 * scale);
     let _ = cr.stroke();
 }
 
@@ -852,10 +862,13 @@ impl App {
                 crate::app::Side::Source => from,
                 crate::app::Side::Target => to,
             };
+            let filtered = lang::filter(&dropdown.query);
+            let inner_pad = 6.0 * scale;
+            let search_h = 30.0 * scale;
             let item_h = 24.0 * scale;
-            let items = lang::LANGS.len();
-            let list_h = items as f64 * item_h + 2.0 * scale;
-            let list_w = anchor.w.max(170.0 * scale);
+            let rows = filtered.len().max(if filtered.is_empty() { 1 } else { 0 });
+            let list_h = inner_pad * 2.0 + search_h + 4.0 * scale + rows as f64 * item_h;
+            let list_w = anchor.w.max(190.0 * scale);
 
             let mut list_y = anchor.y + anchor.h + 2.0 * scale;
             if list_y + list_h > h - pad {
@@ -869,6 +882,7 @@ impl App {
             };
             self.layout.dropdown = list;
             self.layout.dropdown_items.clear();
+            self.layout.dropdown_langs.clear();
 
             cr.set_source_rgba(0.0, 0.0, 0.0, 0.45);
             rounded_path(
@@ -886,37 +900,131 @@ impl App {
             fill_round(cr, &list, 6.0 * scale, PANEL);
             stroke_round(cr, &list, 6.0 * scale, BORDER, 1.0 * scale);
 
+            let search = Rect {
+                x: list.x + inner_pad,
+                y: list.y + inner_pad,
+                w: list.w - 2.0 * inner_pad,
+                h: search_h,
+            };
+            fill_round(cr, &search, 4.0 * scale, BG);
+            stroke_round(
+                cr,
+                &search,
+                4.0 * scale,
+                if dropdown.query.is_empty() {
+                    BORDER
+                } else {
+                    ACCENT
+                },
+                1.0 * scale,
+            );
+
+            let query_font = 12.5 * scale;
+            let query_lh = line_height(&pctx, query_font);
+            let query_y = search.y + (search.h - query_lh) / 2.0;
+            let query_x = search.x + 8.0 * scale;
+            let query_w = (search.w - 16.0 * scale).max(1.0);
+
+            let _ = cr.save();
+            cr.rectangle(
+                search.x + 1.0 * scale,
+                search.y + 1.0 * scale,
+                search.w - 2.0 * scale,
+                search.h - 2.0 * scale,
+            );
+            cr.clip();
+
+            if dropdown.query.is_empty() {
+                if self.focused && self.caret_on {
+                    set_color(cr, ACCENT);
+                    cr.rectangle(query_x, query_y, 1.5 * scale, query_lh);
+                    let _ = cr.fill();
+                }
+                draw_text(
+                    cr,
+                    &pctx,
+                    "Search languages…",
+                    query_x + 4.0 * scale,
+                    query_y,
+                    query_w - 4.0 * scale,
+                    query_font,
+                    false,
+                    MUTED,
+                );
+                self.ime_area = Some((query_x + 4.0 * scale, query_y, query_lh));
+            } else {
+                let query_layout = text_layout(&pctx, &dropdown.query, -1.0, query_font, false);
+                let qw = layout_width(&query_layout);
+                let qx = (query_x - (qw - query_w).max(0.0)).max(query_x);
+                set_color(cr, TEXT);
+                draw_layout(cr, &query_layout, qx, query_y);
+                let caret_x = qx + qw + 1.0 * scale;
+                if self.focused && self.caret_on {
+                    set_color(cr, ACCENT);
+                    cr.rectangle(caret_x, query_y, 1.5 * scale, query_lh);
+                    let _ = cr.fill();
+                }
+                self.ime_area = Some((caret_x, query_y, query_lh));
+            }
+            let _ = cr.restore();
+
+            let items_y = search.y + search.h + 4.0 * scale;
             let selected_idx = match dropdown.side {
                 crate::app::Side::Source => self.source_idx,
                 crate::app::Side::Target => self.target_idx,
             };
 
-            for (idx, language) in lang::LANGS.iter().enumerate() {
+            if filtered.is_empty() {
+                let lh = line_height(&pctx, 12.0 * scale);
+                draw_text(
+                    cr,
+                    &pctx,
+                    "No matches",
+                    list.x + inner_pad + 3.0 * scale,
+                    items_y + (item_h - lh) / 2.0,
+                    list.w - 2.0 * inner_pad,
+                    12.0 * scale,
+                    false,
+                    MUTED,
+                );
+            }
+
+            for (vis, &lang_idx) in filtered.iter().enumerate() {
                 let item = Rect {
                     x: list.x + 2.0 * scale,
-                    y: list.y + 1.0 * scale + idx as f64 * item_h,
+                    y: items_y + vis as f64 * item_h,
                     w: list.w - 4.0 * scale,
                     h: item_h,
                 };
-                if idx == selected_idx {
+                let is_current = lang_idx == selected_idx;
+                if dropdown.highlight == Some(vis) {
                     fill_round(cr, &item, 4.0 * scale, ACCENT_DIM);
-                } else if is_hover(self, &item) {
-                    fill_round(cr, &item, 4.0 * scale, PANEL_HOVER);
                 }
-                let item_layout = text_layout(&pctx, language.name, -1.0, 12.0 * scale, false);
+                let item_layout =
+                    text_layout(&pctx, lang::LANGS[lang_idx].name, -1.0, 12.0 * scale, false);
                 let th = layout_height(&item_layout);
-                set_color(cr, TEXT);
+                set_color(cr, if is_current { ACCENT } else { TEXT });
                 draw_layout(
                     cr,
                     &item_layout,
                     item.x + 9.0 * scale,
                     item.y + (item.h - th) / 2.0,
                 );
+                if is_current {
+                    draw_check(
+                        cr,
+                        item.x + item.w - 14.0 * scale,
+                        item.y + item.h / 2.0,
+                        scale,
+                    );
+                }
                 self.layout.dropdown_items.push(item);
+                self.layout.dropdown_langs.push(lang_idx);
             }
         } else {
             self.layout.dropdown = Rect::default();
             self.layout.dropdown_items.clear();
+            self.layout.dropdown_langs.clear();
         }
     }
 }
