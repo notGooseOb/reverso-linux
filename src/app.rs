@@ -50,6 +50,7 @@ pub struct App {
     pub busy: bool,
     pub error: Option<String>,
     pub selected_option: Option<usize>,
+    pub mixed_examples: Vec<translator::Example>,
     pub dropdown: Option<Dropdown>,
 
     pub layout: Layout,
@@ -149,6 +150,7 @@ impl App {
             busy: false,
             error: None,
             selected_option: None,
+            mixed_examples: Vec::new(),
             dropdown: None,
             layout: Layout::default(),
             scroll: 0.0,
@@ -194,6 +196,7 @@ impl App {
         self.error = None;
         self.response = None;
         self.selected_option = None;
+        self.mixed_examples.clear();
         self.examples_loading = None;
         self.examples_request += 1;
         self.scroll = 0.0;
@@ -233,6 +236,7 @@ impl App {
             }
         }
         config::save(Some(&target), Some(&source));
+        self.refresh_mixed_examples();
 
         let autofetch = self.response.as_ref().and_then(|response| {
             let chips = translator::is_short_text(&response.input) && response.options.len() > 1;
@@ -310,7 +314,26 @@ impl App {
                 }
             }
         }
+        self.refresh_mixed_examples();
         self.request_redraw();
+    }
+
+    fn refresh_mixed_examples(&mut self) {
+        let Some(response) = &self.response else {
+            self.mixed_examples.clear();
+            return;
+        };
+        let mut seen = std::collections::HashSet::new();
+        let mut mixed = Vec::new();
+        for option in &response.options {
+            for example in &option.examples {
+                let key = (example.source.clone(), example.target.clone());
+                if seen.insert(key) {
+                    mixed.push(example.clone());
+                }
+            }
+        }
+        self.mixed_examples = mixed;
     }
 
     fn selected_translation(&self) -> Option<String> {
@@ -661,8 +684,12 @@ impl App {
             return;
         }
         if let Some(idx) = self.layout.chips.iter().position(|r| r.contains(x, y)) {
-            self.selected_option = Some(idx);
-            self.fetch_examples_for(idx);
+            if self.selected_option == Some(idx) {
+                self.selected_option = None;
+            } else {
+                self.selected_option = Some(idx);
+                self.fetch_examples_for(idx);
+            }
             self.request_redraw();
         }
     }

@@ -260,6 +260,7 @@ fn draw_response(
     chips: &mut Vec<Rect>,
     selected: &mut Option<usize>,
     loading: Option<usize>,
+    mixed: &[translator::Example],
 ) -> f64 {
     let gap = 6.0 * scale;
     let short = translator::is_short_text(&response.input);
@@ -367,17 +368,21 @@ fn draw_response(
         y += draw_text(cr, pctx, &header, x, y, width, 12.0 * scale, true, MUTED) + 5.0 * scale;
 
         if show_chips && selected.is_none() {
-            y += draw_text(
-                cr,
-                pctx,
-                "Select a translation to see examples.",
-                x,
-                y,
-                width,
-                11.5 * scale,
-                false,
-                MUTED,
-            ) + 4.0 * scale;
+            if mixed.is_empty() {
+                y += draw_text(
+                    cr,
+                    pctx,
+                    "Select a translation to see examples.",
+                    x,
+                    y,
+                    width,
+                    11.5 * scale,
+                    false,
+                    MUTED,
+                ) + 4.0 * scale;
+            } else {
+                draw_examples(cr, pctx, mixed, x, width, &mut y, scale);
+            }
         } else if opt.examples.is_empty() && loading.is_some() && loading == shown_index {
             y += draw_text(
                 cr,
@@ -797,6 +802,7 @@ impl App {
                 &mut self.layout.chips,
                 &mut self.selected_option,
                 self.examples_loading,
+                &self.mixed_examples,
             );
         } else {
             cy += draw_text(

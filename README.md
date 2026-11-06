@@ -21,7 +21,7 @@ compared with ~53 ms / 34 MB for the old GTK3 build.
 - **Persistent source & target language** — saved to `~/.config/reverso-linux/config`
 - **Searchable language menu** — type to filter by name or code; `↑`/`↓` and `Enter` select
 - **Translation options** for short text (1–3 words) with frequency counts
-- **Usage examples** — click a translation option to fetch sentence pairs side by side
+- **Usage examples** — mixed examples appear immediately when the response provides them; click a chip for option-specific examples
 - **Full Unicode** — Arabic/Hebrew RTL and mixed-direction text, CJK, combining marks
 - **IME support** — composing text is drawn inline and committed through the platform IME
 - **HiDPI aware**, works on both Wayland and X11
@@ -83,7 +83,7 @@ Keyboard and mouse:
 - **Esc** — close (or dismiss the language dropdown)
 - **Ctrl+A / C / V / X** — select all, copy, paste, cut
 - Open a language menu and type to filter; **↑/↓** moves the highlight, **Enter** selects, **Esc** closes
-- Click a translation chip to load examples for it
+- Click a translation chip to show its examples; click it again to return to the mixed view
 - Mouse wheel — scroll the results and examples
 
 If there is no text on stdin and no arguments, the program exits without opening a
