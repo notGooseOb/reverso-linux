@@ -14,3 +14,6 @@ Thumbs.db
 release/
 *.tar.gz
 *.sha256
+
+# rust build
+/target/

@@ -1,37 +1,23 @@
-VERSION ?= $(shell { git describe --tags --match 'v*' 2>/dev/null || echo "0.0.1"; } | sed 's/^v//')
-CFLAGS = -O3 -Wall -Wextra -pedantic -std=c11 -D_GNU_SOURCE -DVERSION=\"$(VERSION)\" $(shell pkg-config --cflags libcurl json-c gtk+-3.0)
-LDLIBS = $(shell pkg-config --libs libcurl json-c gtk+-3.0) -lm
+PREFIX  ?= /usr/local
+BINDIR  ?= $(PREFIX)/bin
+CARGO   ?= cargo
+BIN      = target/release/reverso-linux
+DEST     = reverso-linux
 
-BUILD_DIR = build
-SRC = src/main.c src/translator.c src/gui.c src/config.c
-OBJ = $(SRC:src/%.c=$(BUILD_DIR)/%.o)
-TARGET = reverso-linux
+all: $(BIN)
+	cp -f $(BIN) $(DEST)
 
-all: $(BUILD_DIR) $(TARGET)
+$(BIN): Cargo.toml build.rs $(wildcard src/*.rs)
+	APP_VERSION="$(VERSION)" $(CARGO) build --release
 
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
-
-$(BUILD_DIR)/%.o: src/%.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-$(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
-
-clean:
-	rm -rf $(BUILD_DIR) $(TARGET)
-
-PREFIX ?= /usr/local
-DESTDIR ?=
-
-install: $(TARGET)
-	install -d $(DESTDIR)$(PREFIX)/bin
-	install -m 755 $(TARGET) $(DESTDIR)$(PREFIX)/bin/$(TARGET)
+install: all
+	install -Dm755 $(DEST) $(DESTDIR)$(BINDIR)/reverso-linux
 
 uninstall:
-	rm -f $(DESTDIR)$(PREFIX)/bin/$(TARGET)
+	rm -f $(DESTDIR)$(BINDIR)/reverso-linux
 
-format:
-	clang-format -i src/*.c src/*.h
+clean:
+	$(CARGO) clean
+	rm -f $(DEST)
 
-.PHONY: all clean install uninstall format
+.PHONY: all install uninstall clean
