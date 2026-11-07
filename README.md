@@ -6,16 +6,6 @@ and side-by-side usage examples.
 
 ![Screenshot](./assets/screenshot_hyprland.png)
 
-## Why this stack?
-
-The GUI is written in Rust with **winit** (window, input, IME, HiDPI),
-**softbuffer** (CPU presentation over `wl_shm`/`XPutImage`, no OpenGL) and
-**Pango/Cairo** (HarfBuzz shaping, FriBidi bidi, Fontconfig fallback).
-There is no GTK, Qt, WebKit or Electron at runtime.
-
-On the development machine this gives roughly **30 ms to first frame and 32 MB RSS**,
-compared with ~53 ms / 34 MB for the old GTK3 build.
-
 ## Features
 
 - **Persistent source & target language** — saved to `~/.config/reverso-linux/config`
